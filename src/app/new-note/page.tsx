@@ -1,5 +1,8 @@
 "use client";
 import { useRef, useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Stack, TextField, Button, MenuItem, Typography, Snackbar, Alert, FormControlLabel, Switch, Link as MLink } from "@mui/material";
 import Box from "@mui/material/Box";
 import Section from "@/components/Section";
@@ -8,6 +11,10 @@ import Section from "@/components/Section";
 type ResultType = "Olumlu" | "Olumsuz" | "Sonraya Randevu";
 
 export default function NewNotePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  // Tüm state'leri en üstte tanımla
   const [company, setCompany] = useState("");
   const [contact, setContact] = useState("");
   const [result, setResult] = useState<ResultType | "">("");
@@ -20,6 +27,21 @@ export default function NewNotePage() {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaChunksRef = useRef<BlobPart[]>([]);
+
+  useEffect(() => {
+    if (status === "loading") return; // Yükleniyor
+    if (!session) {
+      router.push("/login");
+    }
+  }, [session, status, router]);
+
+  if (status === "loading") {
+    return <div>Yükleniyor...</div>;
+  }
+
+  if (!session) {
+    return null; // Redirect olacak
+  }
 
   const canSubmit = company.trim().length > 0 && (!!result && (result !== "Sonraya Randevu" || !!reminderIso));
 

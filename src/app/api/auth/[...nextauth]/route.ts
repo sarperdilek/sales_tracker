@@ -44,20 +44,27 @@ export const authOptions: NextAuthOptions = {
       return token as JWT;
     },
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
+      // Debug logging
+      console.log(`[NextAuth Redirect] url: ${url}, baseUrl: ${baseUrl}`);
+      
       // Döngüyü önlemek için callbackUrl parametresini temizle
       if (url.includes('callbackUrl=') || url.includes('login')) {
+        console.log(`[NextAuth Redirect] Blocking loop: ${url} -> ${baseUrl}`);
         return baseUrl;
       }
       
       // Relative URL'ler için baseUrl kullan
       if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
+        const result = `${baseUrl}${url}`;
+        console.log(`[NextAuth Redirect] Relative: ${url} -> ${result}`);
+        return result;
       }
       
       // Absolute URL'ler için origin kontrolü
       try {
         const urlObj = new URL(url);
         if (urlObj.origin === baseUrl) {
+          console.log(`[NextAuth Redirect] Same origin: ${url}`);
           return url;
         }
       } catch {
@@ -65,6 +72,7 @@ export const authOptions: NextAuthOptions = {
       }
       
       // Varsayılan olarak ana sayfaya yönlendir
+      console.log(`[NextAuth Redirect] Default: ${url} -> ${baseUrl}`);
       return baseUrl;
     },
   },

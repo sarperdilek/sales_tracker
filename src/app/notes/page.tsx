@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { Stack, TextField, MenuItem, Typography, Skeleton, Card, CardContent, useMediaQuery, Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -25,6 +27,10 @@ type NoteRow = {
 };
 
 export default function NotesPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  // Tüm hook'ları en üstte tanımla
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down("sm"));
   const [rows, setRows] = useState<NoteRow[]>([]);
@@ -34,24 +40,7 @@ export default function NotesPage() {
   const [resultFilter, setResultFilter] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-
   const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (query) params.set("q", query);
-      if (resultFilter) params.set("result", resultFilter);
-      if (startDate) params.set("start", startDate);
-      if (endDate) params.set("end", endDate);
-      const res = await fetch(`/api/notes?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRows(data.items);
-      }
-      setLoading(false);
-    })();
-  }, [query, resultFilter, startDate, endDate]);
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -75,6 +64,38 @@ export default function NotesPage() {
     ],
     []
   );
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (!session) {
+      router.push("/login");
+    }
+  }, [session, status, router]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      if (resultFilter) params.set("result", resultFilter);
+      if (startDate) params.set("start", startDate);
+      if (endDate) params.set("end", endDate);
+      const res = await fetch(`/api/notes?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRows(data.items);
+      }
+      setLoading(false);
+    })();
+  }, [query, resultFilter, startDate, endDate]);
+
+  if (status === "loading") {
+    return <div>Yükleniyor...</div>;
+  }
+
+  if (!session) {
+    return null;
+  }
 
   return (
     <Stack p={3} spacing={2}>
