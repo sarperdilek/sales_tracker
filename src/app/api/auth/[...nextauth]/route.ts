@@ -43,12 +43,44 @@ export const authOptions: NextAuthOptions = {
       }
       return token as JWT;
     },
-    // Redirect callback'i tamamen kaldırıyoruz - NextAuth default davranışını kullansın
+    async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
+      // Güvenli alanlara sabitle - döngüyü önle
+      if (url.startsWith("/")) {
+        // Relative URL'ler için baseUrl kullan
+        return `${baseUrl}${url}`;
+      }
+      
+      // Absolute URL'ler için origin kontrolü
+      try {
+        const urlObj = new URL(url);
+        // Sadece aynı origin'e izin ver
+        if (urlObj.origin === baseUrl) {
+          return url;
+        }
+      } catch {
+        // Geçersiz URL'ler için baseUrl döndür
+      }
+      
+      // Varsayılan olarak ana sayfaya yönlendir
+      return baseUrl;
+    },
   },
   pages: {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined,
+      },
+    },
+  },
 };
 
 const handler = NextAuth(authOptions);
