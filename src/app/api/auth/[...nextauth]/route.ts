@@ -44,16 +44,19 @@ export const authOptions: NextAuthOptions = {
       return token as JWT;
     },
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
-      // Güvenli alanlara sabitle - döngüyü önle
+      // Döngüyü önlemek için callbackUrl parametresini temizle
+      if (url.includes('callbackUrl=') || url.includes('login')) {
+        return baseUrl;
+      }
+      
+      // Relative URL'ler için baseUrl kullan
       if (url.startsWith("/")) {
-        // Relative URL'ler için baseUrl kullan
         return `${baseUrl}${url}`;
       }
       
       // Absolute URL'ler için origin kontrolü
       try {
         const urlObj = new URL(url);
-        // Sadece aynı origin'e izin ver
         if (urlObj.origin === baseUrl) {
           return url;
         }

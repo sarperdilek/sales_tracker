@@ -20,7 +20,7 @@ const theme = createTheme({
 
 export default function RootProviders({ children }: { children: ReactNode }) {
   return (
-    <SessionProvider>
+    <SessionProvider basePath="/api/auth">
       <ThemeProvider theme={theme}>
         <CssBaseline />
         {children}

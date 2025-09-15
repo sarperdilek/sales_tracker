@@ -15,7 +15,7 @@ export default function LoginPage() {
         <Typography color="text.secondary" paragraph>
           Google ile hızlıca giriş yapın.
         </Typography>
-        <Button variant="contained" color="primary" onClick={() => signIn("google", { callbackUrl: "/" })}>Google ile Giriş Yap</Button>
+        <Button variant="contained" color="primary" onClick={() => signIn("google")}>Google ile Giriş Yap</Button>
       </Box>
     </Container>
   );
