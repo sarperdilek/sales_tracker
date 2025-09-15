@@ -3,7 +3,15 @@ import { google } from "googleapis";
 export async function getSheetsClient() {
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL as string;
   const privateKey = (process.env.GOOGLE_SHEETS_PRIVATE_KEY as string)?.replace(/\\n/g, "\n");
-  if (!clientEmail || !privateKey) throw new Error("Google Sheets kimlik bilgileri eksik");
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID as string;
+  
+  console.log(`[Sheets] Client Email: ${clientEmail ? 'SET' : 'MISSING'}`);
+  console.log(`[Sheets] Private Key: ${privateKey ? 'SET' : 'MISSING'}`);
+  console.log(`[Sheets] Spreadsheet ID: ${spreadsheetId ? 'SET' : 'MISSING'}`);
+  
+  if (!clientEmail || !privateKey || !spreadsheetId) {
+    throw new Error(`Google Sheets kimlik bilgileri eksik: email=${!!clientEmail}, key=${!!privateKey}, sheet=${!!spreadsheetId}`);
+  }
   const jwt = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,

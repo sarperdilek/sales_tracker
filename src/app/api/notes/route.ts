@@ -7,18 +7,20 @@ import { reverseGeocode } from "@/lib/geocoding";
 
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ detail: "Yetkisiz" }, { status: 401 });
-  }
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get("q")?.toLowerCase() || "";
-  const result = searchParams.get("result") || "";
-  const start = searchParams.get("start") || "";
-  const end = searchParams.get("end") || "";
-  const wantStats = searchParams.get("stats") === "1";
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ detail: "Yetkisiz" }, { status: 401 });
+    }
+    const { searchParams } = new URL(req.url);
+    const q = searchParams.get("q")?.toLowerCase() || "";
+    const result = searchParams.get("result") || "";
+    const start = searchParams.get("start") || "";
+    const end = searchParams.get("end") || "";
+    const wantStats = searchParams.get("stats") === "1";
 
-  const values = await queryRows("Sayfa1!A:L");
+    console.log(`[API Notes] Getting stats for user: ${session.user.email}`);
+    const values = await queryRows("Sayfa1!A:L");
   const rows = values.slice(1);
   let items = rows
     .map((r: string[], idx: number) => ({
@@ -54,6 +56,10 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ items });
+  } catch (error) {
+    console.error(`[API Notes] Error:`, error);
+    return NextResponse.json({ detail: "Sunucu hatası" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
