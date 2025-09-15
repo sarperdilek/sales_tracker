@@ -80,18 +80,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined,
-      },
-    },
-  },
+  // cookies config removed to use NextAuth defaults
 };
 
 const handler = NextAuth(authOptions);
