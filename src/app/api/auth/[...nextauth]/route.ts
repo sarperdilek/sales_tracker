@@ -44,11 +44,12 @@ export const authOptions: NextAuthOptions = {
       return token as JWT;
     },
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
-      // Login sonrası ana sayfaya yönlendir
-      const newUrl = new URL(url, baseUrl);
-      if (newUrl.pathname.startsWith("/api/auth")) return baseUrl;
-      if (newUrl.pathname === "/login") return baseUrl;
-      if (newUrl.origin === baseUrl) return newUrl.toString();
+      // Güvenli ve öngörülebilir yönlendirme
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const u = new URL(url);
+        if (u.origin === baseUrl) return url;
+      } catch {}
       return baseUrl;
     },
   },
