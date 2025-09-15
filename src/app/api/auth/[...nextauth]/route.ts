@@ -43,15 +43,7 @@ export const authOptions: NextAuthOptions = {
       }
       return token as JWT;
     },
-    async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
-      // Güvenli ve öngörülebilir yönlendirme
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      try {
-        const u = new URL(url);
-        if (u.origin === baseUrl) return url;
-      } catch {}
-      return baseUrl;
-    },
+    // Redirect callback'i tamamen kaldırıyoruz - NextAuth default davranışını kullansın
   },
   pages: {
     signIn: "/login",
