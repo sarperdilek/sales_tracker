@@ -1,9 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import { Stack, TextField, MenuItem, Typography, Grid, Skeleton, Card, CardContent, useMediaQuery } from "@mui/material";
+import { Stack, TextField, MenuItem, Typography, Skeleton, Card, CardContent, useMediaQuery, Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
 
 type NoteRow = {
   id: string;
@@ -23,6 +28,8 @@ export default function NotesPage() {
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down("sm"));
   const [rows, setRows] = useState<NoteRow[]>([]);
+  const [editRow, setEditRow] = useState<NoteRow | null>(null);
+  const [editResult, setEditResult] = useState<string>("");
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
@@ -72,25 +79,17 @@ export default function NotesPage() {
   return (
     <Stack p={3} spacing={2}>
       <Typography variant="h5">Notlar</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField label="Firma Adı" value={query} onChange={(e) => setQuery(e.target.value)} fullWidth inputProps={{ "aria-label": "Firma Adı ara" }} />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField select label="Görüşme Sonucu" value={resultFilter} onChange={(e) => setResultFilter(e.target.value)} fullWidth SelectProps={{ displayEmpty: true }} FormHelperTextProps={{ sx: { margin: 0 } }}>
-            <MenuItem value="">Hepsi</MenuItem>
-            <MenuItem value="Olumlu">Olumlu</MenuItem>
-            <MenuItem value="Olumsuz">Olumsuz</MenuItem>
-            <MenuItem value="Sonraya Randevu">Sonraya Randevu</MenuItem>
-          </TextField>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField type="date" label="Başlangıç" InputLabelProps={{ shrink: true }} value={startDate} onChange={(e) => setStartDate(e.target.value)} fullWidth inputProps={{ "aria-label": "Başlangıç tarihi" }} />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField type="date" label="Bitiş" InputLabelProps={{ shrink: true }} value={endDate} onChange={(e) => setEndDate(e.target.value)} fullWidth inputProps={{ "aria-label": "Bitiş tarihi" }} />
-        </Grid>
-      </Grid>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
+        <TextField label="Firma Adı" value={query} onChange={(e) => setQuery(e.target.value)} fullWidth inputProps={{ "aria-label": "Firma Adı ara" }} />
+        <TextField select label="Görüşme Sonucu" value={resultFilter} onChange={(e) => setResultFilter(e.target.value)} fullWidth SelectProps={{ displayEmpty: true }} FormHelperTextProps={{ sx: { margin: 0 } }}>
+          <MenuItem value="">Hepsi</MenuItem>
+          <MenuItem value="Olumlu">Olumlu</MenuItem>
+          <MenuItem value="Olumsuz">Olumsuz</MenuItem>
+          <MenuItem value="Sonraya Randevu">Sonraya Randevu</MenuItem>
+        </TextField>
+        <TextField type="date" label="Başlangıç" InputLabelProps={{ shrink: true }} value={startDate} onChange={(e) => setStartDate(e.target.value)} fullWidth inputProps={{ "aria-label": "Başlangıç tarihi" }} />
+        <TextField type="date" label="Bitiş" InputLabelProps={{ shrink: true }} value={endDate} onChange={(e) => setEndDate(e.target.value)} fullWidth inputProps={{ "aria-label": "Bitiş tarihi" }} />
+      </Box>
       {loading ? (
         <Stack spacing={1}>
           <Skeleton variant="rectangular" height={48} />
@@ -117,9 +116,48 @@ export default function NotesPage() {
         </Stack>
       ) : (
         <div style={{ width: "100%", background: "#fff" }}>
-          <DataGrid rows={rows} columns={columns} autoHeight disableRowSelectionOnClick />
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            autoHeight
+            disableRowSelectionOnClick
+            onRowDoubleClick={(p) => {
+              setEditRow(p.row as NoteRow);
+              setEditResult((p.row as NoteRow).result);
+            }}
+          />
         </div>
       )}
+
+      <Dialog open={!!editRow} onClose={() => setEditRow(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Notu Düzenle</DialogTitle>
+        <DialogContent>
+          <TextField select label="Görüşme Sonucu" value={editResult} onChange={(e) => setEditResult(e.target.value)} fullWidth sx={{ mt: 2 }}>
+            <MenuItem value="Olumlu">Olumlu</MenuItem>
+            <MenuItem value="Olumsuz">Olumsuz</MenuItem>
+            <MenuItem value="Sonraya Randevu">Sonraya Randevu</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditRow(null)}>İptal</Button>
+          <Button variant="contained" onClick={async () => {
+            if (!editRow) return;
+            await fetch("/api/notes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sheetRow: (editRow as NoteRow & { sheetRow: number }).sheetRow, result: editResult }) });
+            setEditRow(null);
+            // Refresh rows
+            const params = new URLSearchParams();
+            if (query) params.set("q", query);
+            if (resultFilter) params.set("result", resultFilter);
+            if (startDate) params.set("start", startDate);
+            if (endDate) params.set("end", endDate);
+            const res = await fetch(`/api/notes?${params.toString()}`);
+            if (res.ok) {
+              const data = await res.json();
+              setRows(data.items);
+            }
+          }}>Kaydet</Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

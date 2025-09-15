@@ -7,7 +7,7 @@ import { Readable } from "stream";
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ detail: "Yetkisiz" }, { status: 401 });
-  const accessToken = (session as Record<string, unknown>)["accessToken"] as string | undefined;
+  const accessToken = (session as unknown as { accessToken?: string }).accessToken;
   if (!accessToken) return NextResponse.json({ detail: "Erişim anahtarı yok" }, { status: 401 });
 
   try {

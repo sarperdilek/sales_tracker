@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
-import { Stack, TextField, Button, MenuItem, Grid, Typography, Snackbar, Alert, FormControlLabel, Switch, Link as MLink } from "@mui/material";
+import { Stack, TextField, Button, MenuItem, Typography, Snackbar, Alert, FormControlLabel, Switch, Link as MLink } from "@mui/material";
+import Box from "@mui/material/Box";
 import Section from "@/components/Section";
 // removed unused DateTime import
 
@@ -17,39 +18,62 @@ export default function NewNotePage() {
   const [addToCalendar, setAddToCalendar] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>("");
-  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaChunksRef = useRef<BlobPart[]>([]);
 
   const canSubmit = company.trim().length > 0 && (!!result && (result !== "Sonraya Randevu" || !!reminderIso));
 
-  // Basit Web Speech API entegrasyonu
-  let recognition: SpeechRecognition | null = null;
-  if (typeof window !== "undefined" && (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition) {
-    const Ctor = (window as unknown as { webkitSpeechRecognition: new () => SpeechRecognition }).webkitSpeechRecognition;
+  // Tek akış: STT + MediaRecorder birlikte
+  interface MinimalSpeechRecognition {
+    start: () => void;
+    stop: () => void;
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onresult: (event: { resultIndex: number; results: { length: number; [index: number]: { 0: { transcript: string } } } }) => void;
+  }
+  let recognition: MinimalSpeechRecognition | null = null;
+  if (typeof window !== "undefined" && (window as unknown as { webkitSpeechRecognition?: new () => MinimalSpeechRecognition }).webkitSpeechRecognition) {
+    const Ctor = (window as unknown as { webkitSpeechRecognition: new () => MinimalSpeechRecognition }).webkitSpeechRecognition;
     recognition = new Ctor();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "tr-TR";
   }
 
-  const handleStartStop = () => {
-    if (!recognition) return;
-    if (!isRecording) {
-      setIsRecording(true);
-      recognition.start();
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        setRawNote(prev => (prev ? prev + " " : "") + transcript);
-      };
-      recognition.onend = () => setIsRecording(false);
-    } else {
-      recognition.stop();
-      setIsRecording(false);
+  const startUnifiedRecording = async () => {
+    // Reset
+    setRawNote("");
+    setAudioBlob(null);
+    setAudioUrl("");
+
+    // Start STT
+    if (recognition) {
+      try {
+        recognition.start();
+        recognition.onresult = (event: { resultIndex: number; results: { length: number; [index: number]: { 0: { transcript: string } } } }) => {
+          let transcript = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          setRawNote(prev => (prev ? prev + " " : "") + transcript);
+        };
+      } catch {
+        // sessiz geç
+      }
     }
+
+    // Start MediaRecorder
+    await startAudioRecording();
+    setIsRecording(true);
+  };
+
+  const stopUnifiedRecording = () => {
+    if (recognition) {
+      try { recognition.stop(); } catch { /* sessiz */ }
+    }
+    stopAudioRecording();
+    setIsRecording(false);
   };
 
   // Ham ses kaydı (MediaRecorder) - otomatik Drive yükleme
@@ -58,7 +82,6 @@ export default function NewNotePage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
       mediaChunksRef.current = [];
-      setIsRecordingAudio(true);
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) mediaChunksRef.current.push(e.data);
       };
@@ -67,15 +90,13 @@ export default function NewNotePage() {
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
-        setIsRecordingAudio(false);
         // Otomatik Drive yükleme
         await uploadAudioToDrive(blob);
       };
       rec.start();
       mediaRecorderRef.current = rec;
-    } catch (e) {
+    } catch {
       setOpen({ type: "error", msg: "Mikrofon erişimi alınamadı" });
-      setIsRecordingAudio(false);
     }
   };
 
@@ -101,8 +122,9 @@ export default function NewNotePage() {
       const data = await res.json();
       setOpen({ type: "success", msg: "Ses kaydı Drive'a yüklendi" });
       if (data?.webViewLink) setAudioUrl(data.webViewLink);
-    } catch (e: any) {
-      setOpen({ type: "error", msg: e.message || "Yükleme hatası" });
+    } catch {
+      const msg = "Yükleme hatası";
+      setOpen({ type: "error", msg });
     }
   };
 
@@ -149,15 +171,16 @@ export default function NewNotePage() {
           a.click();
           a.remove();
           window.URL.revokeObjectURL(url);
-        } catch (e) {
+        } catch {
           // Sessiz geç
         }
       }
 
       setOpen({ type: "success", msg: "Not başarıyla eklendi" });
       setCompany(""); setContact(""); setResult(""); setReminderIso(""); setRawNote(""); setAddToCalendar(false);
-    } catch (e: any) {
-      setOpen({ type: "error", msg: e.message || "Hata" });
+    } catch {
+      const msg = "Hata";
+      setOpen({ type: "error", msg });
     }
   };
 
@@ -166,35 +189,27 @@ export default function NewNotePage() {
       <Typography variant="h5">Yeni Not Ekle</Typography>
 
       <Section title="Görüşme Bilgileri">
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <TextField required label="Firma Adı" fullWidth value={company} onChange={(e) => setCompany(e.target.value)} />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField label="Görüşülen Kişi" fullWidth value={contact} onChange={(e) => setContact(e.target.value)} />
-          </Grid>
-        </Grid>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
+          <TextField required label="Firma Adı" fullWidth value={company} onChange={(e) => setCompany(e.target.value)} />
+          <TextField label="Görüşülen Kişi" fullWidth value={contact} onChange={(e) => setContact(e.target.value)} />
+        </Box>
       </Section>
 
       <Section title="Sonuç ve Hatırlatma">
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <TextField select label="Görüşme Sonucu" fullWidth size="large" SelectProps={{ native: false }} value={result} onChange={(e) => setResult(e.target.value as ResultType)} helperText="Görüşmenin sonucunu seçin">
-              {["Olumlu","Olumsuz","Sonraya Randevu"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-            </TextField>
-          </Grid>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
+          <TextField select label="Görüşme Sonucu" fullWidth size="medium" SelectProps={{ native: false }} value={result} onChange={(e) => setResult(e.target.value as ResultType)} helperText="Görüşmenin sonucunu seçin">
+            {["Olumlu","Olumsuz","Sonraya Randevu"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+          </TextField>
           {result === "Sonraya Randevu" && (
-            <Grid item xs={12} sm={6}>
-              <TextField type="datetime-local" label="Hatırlatma Tarihi" fullWidth size="medium" InputLabelProps={{ shrink: true }} value={reminderIso} onChange={(e) => setReminderIso(e.target.value)} helperText="Randevu tarihi ve saati" />
-            </Grid>
+            <TextField type="datetime-local" label="Hatırlatma Tarihi" fullWidth size="medium" InputLabelProps={{ shrink: true }} value={reminderIso} onChange={(e) => setReminderIso(e.target.value)} helperText="Randevu tarihi ve saati" />
           )}
           {result === "Sonraya Randevu" && (
-            <Grid item xs={12}>
+            <Box sx={{ gridColumn: "1 / -1" }}>
               <FormControlLabel control={<Switch checked={addToCalendar} onChange={(e) => setAddToCalendar(e.target.checked)} />} label="Takvime ekle" />
-            </Grid>
+            </Box>
           )}
           {result === "Sonraya Randevu" && addToCalendar && reminderIso && (
-            <Grid item xs={12}>
+            <Box sx={{ gridColumn: "1 / -1" }}>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <Button
                   variant="outlined"
@@ -228,41 +243,28 @@ export default function NewNotePage() {
                   }}
                 >Google Calendar</Button>
               </Stack>
-            </Grid>
+            </Box>
           )}
-        </Grid>
+        </Box>
       </Section>
 
-      <Section title="Notlar">
+      <Section title="Kayıt (STT + Ses)">
         <Stack spacing={2}>
-          <Button variant="outlined" onClick={handleStartStop} sx={{ alignSelf: "flex-start" }}>{isRecording ? "Kaydı Durdur" : "Kaydı Başlat"}</Button>
-          <TextField label="Ham Not" fullWidth multiline minRows={6} value={rawNote} onChange={(e) => setRawNote(e.target.value)} />
+          <Button variant="outlined" onClick={isRecording ? stopUnifiedRecording : startUnifiedRecording} sx={{ alignSelf: "flex-start" }}>{isRecording ? "Kaydı Durdur" : "Kaydı Başlat"}</Button>
+          <TextField label="Ham Not" fullWidth multiline minRows={6} value={rawNote} onChange={(e) => setRawNote(e.target.value)} helperText="Ses kaydı sırasında konuşmanız otomatik metne dönüştürülür" />
         </Stack>
       </Section>
 
-      <Section title="Ses Kaydı (Otomatik Drive Yükleme)">
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-          <Button variant="outlined" onClick={startAudioRecording} disabled={isRecordingAudio}>
-            {isRecordingAudio ? "Kaydediliyor..." : "Ses Kaydı Başlat"}
-          </Button>
-          <Button variant="outlined" onClick={stopAudioRecording} disabled={!isRecordingAudio}>
-            Ses Kaydı Durdur
-          </Button>
-          {audioUrl && (
-            <MLink href={audioUrl} target="_blank" rel="noopener">Drive'da Görüntüle</MLink>
-          )}
-        </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Ses kaydı otomatik olarak Google Drive'a yüklenir
-        </Typography>
-      </Section>
+      {audioUrl && (
+        <Typography variant="body2" color="text.secondary">Ses kaydı yüklendi: <MLink href={audioUrl} target="_blank" rel="noopener">Drive&apos;da Görüntüle</MLink></Typography>
+      )}
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <Button variant="contained" disabled={!canSubmit} onClick={onSubmit}>Kaydet</Button>
       </Stack>
 
       <Snackbar open={!!open} autoHideDuration={3000} onClose={() => setOpen(null)}>
-        {open && <Alert severity={open.type}>{open.msg}</Alert>}
+        {open ? <Alert severity={open.type}>{open.msg}</Alert> : undefined}
       </Snackbar>
     </Stack>
   );

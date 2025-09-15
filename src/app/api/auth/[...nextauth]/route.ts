@@ -1,7 +1,7 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import Google from "next-auth/providers/google";
 import type { JWT } from "next-auth/jwt";
-import type { Session } from "next-auth";
+import type { Session, Account, Profile } from "next-auth";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -22,19 +22,25 @@ export const authOptions: NextAuthOptions = {
       if (session?.user && token?.email) {
         session.user.email = token.email as string;
       }
-      if ((token as Record<string, unknown>).accessToken) {
-        (session as Record<string, unknown>).accessToken = (token as Record<string, unknown>).accessToken;
+      const tokenRecord = token as unknown as Record<string, unknown>;
+      const sessionRecord = session as unknown as Record<string, unknown>;
+      if (tokenRecord.accessToken) {
+        sessionRecord.accessToken = tokenRecord.accessToken;
       }
       return session;
     },
-    async jwt({ token, account, profile }: { token: JWT; account?: Record<string, unknown> | null; profile?: Record<string, unknown> | null }) {
+    async jwt({ token, account, profile }: { token: JWT; account: Account | null; profile?: Profile | undefined }) {
+      const tokenRecord = token as unknown as Record<string, unknown>;
       if (account) {
-        (token as Record<string, unknown>).accessToken = account["access_token"] as string | undefined;
-        (token as Record<string, unknown>).refreshToken = account["refresh_token"] as string | undefined;
-        (token as Record<string, unknown>).expiresAt = account["expires_at"] as number | undefined;
+        const acc = account as unknown as { access_token?: string; refresh_token?: string; expires_at?: number };
+        tokenRecord.accessToken = acc.access_token;
+        tokenRecord.refreshToken = acc.refresh_token;
+        tokenRecord.expiresAt = acc.expires_at;
       }
-      if (profile && typeof profile["email"] === "string") token.email = profile["email"] as string;
-      return token;
+      if (profile && typeof (profile as { email?: unknown }).email === "string") {
+        token.email = (profile as { email?: string }).email as string;
+      }
+      return token as JWT;
     },
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
       // Login sonrası ana sayfaya yönlendir

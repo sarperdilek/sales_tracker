@@ -19,10 +19,11 @@ export async function GET(req: NextRequest) {
   const wantStats = searchParams.get("stats") === "1";
 
   const values = await queryRows("Sayfa1!A:L");
-  const [header, ...rows] = values;
+  const rows = values.slice(1);
   let items = rows
     .map((r: string[], idx: number) => ({
       id: String(idx + 1),
+      sheetRow: idx + 2,
       email: r[0] || "",
       createdAt: r[1] || "",
       company: r[2] || "",
@@ -95,6 +96,41 @@ export async function POST(req: NextRequest) {
       location.cityDistrict,
       createdAtIso, // Ek kolon: ISO format (sıralama/filtre için güvenilir)
     ]);
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Sunucu hatası";
+    return NextResponse.json({ detail: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ detail: "Yetkisiz" }, { status: 401 });
+  }
+  try {
+    const body = (await req.json()) as { sheetRow: number; result?: string; reminderIso?: string | null };
+    const { sheetRow, result, reminderIso } = body;
+    if (!sheetRow) return NextResponse.json({ detail: "Eksik parametre" }, { status: 400 });
+
+    // Mevcut satırı oku
+    const range = `Sayfa1!A${sheetRow}:L${sheetRow}`;
+    const rows = await queryRows(range);
+    const current = rows[0] || [];
+    // Sütunlar: 0..10 (A..L)
+    if (typeof result === "string") current[4] = result;
+    if (typeof reminderIso !== "undefined") current[5] = reminderIso || "";
+
+    // Güncelle
+    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID as string;
+    const sheets = await (await import("@/lib/sheets")).getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [current as string[]] },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
